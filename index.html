@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0e0e10">
+<title>Self-Tape Reader</title>
+<style>
+:root{
+  --bg:#0e0e10; --panel:#18181c; --line:#2a2a30; --text:#ececf0; --dim:#8a8a94;
+  --accent:#f2c14e; --rec:#e5484d; --me:#ffffff; --them:#9fb4ff; --fs:34px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+  font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+body{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+button,select,input,textarea{font:inherit;color:inherit}
+button{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;cursor:pointer}
+button.primary{background:var(--accent);color:#111;border-color:var(--accent);font-weight:600}
+button.rec{background:var(--rec);border-color:var(--rec);color:#fff;font-weight:600}
+button.ghost{background:transparent}
+button.small{padding:6px 10px;font-size:14px}
+button.danger{color:var(--rec)}
+select,input[type=text],textarea{background:#0b0b0d;border:1px solid var(--line);border-radius:8px;padding:8px}
+textarea{width:100%;resize:none;min-height:44px}
+.view{display:none;min-height:100%}
+.view.on{display:block}
+.wrap{max-width:760px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:4px 0 14px}
+h2{font-size:16px;margin:22px 0 8px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.grow{flex:1}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin:8px 0}
+.muted{color:var(--dim);font-size:14px}
+.hidden{display:none!important}
+.lib-item{display:flex;align-items:center;gap:10px}
+.lib-item .t{flex:1;cursor:pointer}
+.ln{display:flex;gap:8px;align-items:flex-start;padding:8px;border-radius:10px;border:1px solid transparent}
+.ln.me{background:#1d1d14}
+.ln.here{border-color:var(--accent)}
+.ln .who{width:118px;flex:none}
+.ln .who select{width:100%;font-size:13px;font-weight:600}
+.ln .acts{display:flex;flex-direction:column;gap:4px}
+.voice{display:grid;grid-template-columns:1fr;gap:6px}
+.voice label{font-size:13px;color:var(--dim)}
+.voice input[type=range]{width:100%}
+details summary{cursor:pointer;color:var(--dim)}
+code{background:#000;padding:1px 5px;border-radius:5px;color:var(--accent)}
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);
+  background:#000;border:1px solid var(--line);padding:10px 14px;border-radius:10px;z-index:99;max-width:90vw}
+
+/* ---------- Run (tape) view ---------- */
+#view-run{position:fixed;inset:0;background:#000;overflow:hidden}
+#preview{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);transition:opacity .2s}
+#preview.back{transform:none}
+#preview.off{opacity:0}
+#tapzone{position:absolute;inset:0}
+#prompter{position:absolute;left:0;right:0;padding:calc(10px + env(safe-area-inset-top)) 18px 14px;
+  background:linear-gradient(rgba(0,0,0,.82),rgba(0,0,0,.55));pointer-events:none;text-align:center}
+#prompter.top{top:0}
+#prompter.bottom{bottom:0;padding-bottom:calc(84px + env(safe-area-inset-bottom));background:linear-gradient(rgba(0,0,0,.55),rgba(0,0,0,.85))}
+.pl .pwho{font-size:12px;letter-spacing:.12em;color:var(--dim);margin-bottom:2px}
+.pl.me .ptxt{font-size:var(--fs);color:var(--me);font-weight:600;line-height:1.2}
+.pl.them .ptxt{font-size:calc(var(--fs)*.6);color:var(--them);line-height:1.25}
+.pl.next{opacity:.45;margin-top:10px}
+.pl.next .ptxt{font-size:calc(var(--fs)*.5)!important;font-weight:400!important}
+.ptxt .tag{color:var(--accent);font-size:.7em}
+.ptxt .par{color:var(--dim);font-style:italic;font-size:.75em}
+#runbar{position:absolute;left:0;right:0;bottom:0;display:flex;gap:8px;align-items:center;justify-content:center;
+  padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:rgba(0,0,0,.6);flex-wrap:wrap}
+#prompter.bottom ~ #runbar{background:rgba(0,0,0,.85)}
+#runstatus{position:absolute;top:calc(8px + env(safe-area-inset-top));right:10px;font-size:13px;display:flex;gap:6px;align-items:center;pointer-events:none}
+#prompter.top ~ #runstatus{top:auto;bottom:calc(70px + env(safe-area-inset-bottom))}
+.pill{background:rgba(0,0,0,.7);padding:4px 9px;border-radius:99px;border:1px solid var(--line)}
+.pill.rec{background:var(--rec);border-color:var(--rec)}
+#meter{width:70px;height:8px;background:#333;border-radius:4px;position:relative;overflow:hidden}
+#meterfill{position:absolute;left:0;top:0;bottom:0;background:#4ade80;width:0}
+#meterthr{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--accent)}
+#countdown{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:120px;font-weight:700;
+  color:#fff;text-shadow:0 4px 30px #000;pointer-events:none}
+#settings{position:absolute;right:10px;left:10px;max-width:420px;margin-left:auto;bottom:calc(70px + env(safe-area-inset-bottom));
+  background:rgba(18,18,22,.97);border:1px solid var(--line);border-radius:14px;padding:14px;max-height:70vh;overflow:auto}
+#settings label{display:block;font-size:13px;color:var(--dim);margin-top:10px}
+#settings input[type=range]{width:100%}
+#portraitHint{position:absolute;top:45%;left:0;right:0;text-align:center;color:var(--dim);font-size:14px;pointer-events:none}
+#camerr{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:30px;text-align:center}
+
+/* ---------- Review ---------- */
+#reviewVideo{width:100%;max-height:60vh;background:#000;border-radius:12px}
+</style>
+</head>
+<body>
+
+<!-- ============ LIBRARY ============ -->
+<section id="view-library" class="view on">
+  <div class="wrap">
+    <h1>Self-Tape Reader</h1>
+    <div class="row">
+      <button class="primary" id="btnPdf">Import PDF sides</button>
+      <button id="btnPaste">Paste text</button>
+      <button id="btnBlank">Blank script</button>
+      <input type="file" id="filePdf" accept="application/pdf,.pdf" class="hidden">
+    </div>
+    <div id="pastePanel" class="card hidden">
+      <div class="muted">Paste a scene. Either <code>NAME: line</code> per line, or screenplay style (NAME on its own line, dialogue under it).</div>
+      <textarea id="pasteText" rows="8" style="margin-top:8px"></textarea>
+      <div class="row" style="margin-top:8px"><button class="primary" id="btnPasteGo">Use this</button><button class="ghost" id="btnPasteCancel">Cancel</button></div>
+    </div>
+    <h2>Your scripts</h2>
+    <div id="libList"></div>
+    <p class="muted" id="libEmpty">Nothing yet. Import some sides to start. Scripts are saved on this device only.</p>
+  </div>
+</section>
+
+<!-- ============ EDITOR ============ -->
+<section id="view-editor" class="view">
+  <div class="wrap">
+    <div class="row">
+      <button class="ghost small" id="btnEdBack">‹ Scripts</button>
+      <div class="grow"></div>
+      <button class="primary hidden" id="btnEdReturn">Back to take ›</button>
+      <button class="primary" id="btnEdRun">Tape it ›</button>
+    </div>
+    <input type="text" id="edTitle" style="width:100%;margin-top:12px;font-size:20px;font-weight:600" placeholder="Title">
+    <div class="row" style="margin-top:12px">
+      <span>I'm playing</span>
+      <select id="edMe" class="grow"></select>
+    </div>
+
+    <h2>Reader voices</h2>
+    <div class="muted" id="voiceNote"></div>
+    <div id="voiceList"></div>
+
+    <h2>Lines</h2>
+    <details class="muted" style="margin-bottom:8px">
+      <summary>Reader direction tags</summary>
+      <p>Type these into a reader line: <code>[pause]</code> <code>[pause 2]</code> <code>[beat]</code> <code>[slow]</code> <code>[fast]</code> <code>[soft]</code> <code>[loud]</code> <code>[high]</code> <code>[low]</code> <code>[normal]</code>. A tag changes everything after it in that line.
+      Screenplay parentheticals aren't spoken; <code>(beat)</code> becomes a 1-second pause. Free voices can't sigh or laugh, so tags like <code>[sighs]</code> are skipped for now.</p>
+    </details>
+    <div id="lineList"></div>
+    <div class="row" style="margin:12px 0 40px">
+      <button id="btnAddEnd">+ Add line</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ RUN / TAPE ============ -->
+<section id="view-run" class="view">
+  <video id="preview" autoplay playsinline muted></video>
+  <div id="tapzone"></div>
+  <div id="portraitHint" class="hidden">Turn the phone sideways for a landscape tape</div>
+  <div id="camerr" class="hidden"></div>
+  <div id="prompter" class="top">
+    <div id="pCur" class="pl"></div>
+    <div id="pNext" class="pl next"></div>
+  </div>
+  <div id="runstatus">
+    <span class="pill" id="stPos"></span>
+    <span class="pill" id="stPhase"></span>
+    <span class="pill rec hidden" id="stRec">● 0:00</span>
+    <span class="pill"><span id="meter"><span id="meterfill"></span><span id="meterthr"></span></span></span>
+  </div>
+  <div id="countdown" class="hidden"></div>
+  <div id="settings" class="hidden">
+    <b>Take settings</b>
+    <label>Cue the reader by</label>
+    <select id="sCue" style="width:100%">
+      <option value="manual">Pedal / tap (you decide, no lag)</option>
+      <option value="auto">Auto: when I go quiet</option>
+    </select>
+    <div id="autoOpts">
+      <label>Quiet time before reader comes in: <span id="sSilVal"></span></label>
+      <input type="range" id="sSil" min="250" max="2500" step="50">
+      <label>Mic sensitivity: <span id="sThrVal"></span> (yellow mark on the meter, set it just above room noise)</label>
+      <input type="range" id="sThr" min="-70" max="-15" step="1">
+    </div>
+    <label>Text size</label>
+    <input type="range" id="sFs" min="18" max="72" step="1">
+    <label>Prompter position</label>
+    <select id="sPos" style="width:100%"><option value="top">Top (closest to front camera)</option><option value="bottom">Bottom</option></select>
+    <label>Countdown before start</label>
+    <select id="sDelay" style="width:100%"><option value="0">None</option><option value="3">3 sec</option><option value="5">5 sec</option><option value="10">10 sec</option></select>
+    <label><input type="checkbox" id="sShow"> Show camera image behind text</label>
+    <div class="row" style="margin-top:12px"><button class="small" id="btnFlip">Switch camera</button><button class="small" id="btnHelp">How to cue</button></div>
+    <p class="muted hidden" id="helpText">Pedal or keyboard: <b>→ / ↓ / Page Down / Space / Enter</b> = next line. <b>← / ↑ / Page Up</b> = back one line. Tapping the screen also works as next.
+      Hitting next while the reader is talking cuts them off (good for overlaps). Before you start, next/back pick which line to start from.</p>
+  </div>
+  <div id="runbar">
+    <button class="small ghost" id="btnRunExit">‹ Exit</button>
+    <button class="small" id="btnRunBack">◀</button>
+    <button class="primary" id="btnRehearse">Rehearse</button>
+    <button class="rec" id="btnRecord">● Record</button>
+    <button class="rec hidden" id="btnStop">■ Stop</button>
+    <button class="small" id="btnRunNext">▶</button>
+    <button class="small" id="btnRunEdit">Edit lines</button>
+    <button class="small" id="btnSettings">⚙</button>
+  </div>
+</section>
+
+<!-- ============ REVIEW ============ -->
+<section id="view-review" class="view">
+  <div class="wrap">
+    <h1 id="reviewTitle">Take</h1>
+    <video id="reviewVideo" controls playsinline></video>
+    <p class="muted" id="reviewInfo"></p>
+    <div class="row">
+      <button class="primary" id="btnSave">Save / Share video</button>
+      <a id="dlLink" class="hidden"></a>
+      <button id="btnRetake">Another take</button>
+      <button class="ghost" id="btnReviewDone">Back to script</button>
+    </div>
+    <p class="muted">Takes aren't kept by the app. Save the ones you want before leaving this screen.</p>
+  </div>
+</section>
+
+<div id="toast" class="hidden"></div>
+
+<script type="module">
+// ---------- Script parsing (PDF sides, pasted text, reader tags) ----------
+
+function cleanName(t) {
+  return t.replace(/\([^)]*\)?/g, ' ')
+    .replace(/\bCONT['’]?D\b\.?/gi, ' ')
+    .replace(/\s+/g, ' ').trim().toUpperCase();
+}
+
+function isCueText(t) {
+  if (!t || /[a-z]/.test(t.replace(/\([^)]*\)?/g, ''))) return false;
+  const name = cleanName(t);
+  if (name.length < 2 || name.length > 35) return false;
+  if (!/[A-Z]/.test(name)) return false;
+  if (!/^[A-Z0-9 .'’\-&#]+$/.test(name)) return false;
+  if (name.split(' ').length > 5) return false;
+  if (/^(INT|EXT|I\/E|INT\/EXT|EST)[.\s/]/.test(name + ' ')) return false;
+  if (/^(FADE|CUT|DISSOLVE|SMASH|MATCH|THE END|END OF|BACK TO|LATER|CONTINUOUS|MONTAGE|FLASHBACK|SUPER|TITLE|SCENE|OMITTED|INSERT|INTERCUT|ANGLE|CLOSE|WIDE|POV|SIDES|PAGE)\b/.test(name)) return false;
+  if (/^\d+[A-Z]?$/.test(name)) return false;
+  return true;
+}
+
+function isNoise(t) {
+  return /^\d+[A-Z]?\.?$/.test(t)
+    || /^\(?(CONTINUED|CONT['’]?D)\)?:?$/i.test(t)
+    || /^(\d+[A-Z]?\s+)?CONTINUED:?(\s*\(\d+\))?(\s+\d+[A-Z]?)?$/i.test(t)
+    || /^page \d+( of \d+)?$/i.test(t);
+}
+
+// pages: array (one per page) of pdf.js text items {str, transform, width}
+function parseScreenplayItems(pages) {
+  const lines = [];
+  pages.forEach((items, pi) => {
+    const its = items
+      .filter(it => it.str && it.str.trim() && it.transform
+        && Math.abs(it.transform[1]) < 0.05 && Math.abs(it.transform[2]) < 0.05)
+      .map(it => ({ s: it.str, x: it.transform[4], y: it.transform[5], w: it.width || 0 }));
+    const rows = [];
+    for (const it of its) {
+      let r = rows.find(r => Math.abs(r.y - it.y) < 2.5);
+      if (!r) { r = { y: it.y, items: [] }; rows.push(r); }
+      r.items.push(it);
+    }
+    rows.sort((a, b) => b.y - a.y);
+    for (const r of rows) {
+      r.items.sort((a, b) => a.x - b.x);
+      let text = '', end = null, x0 = null;
+      for (const it of r.items) {
+        const lead = it.s.length - it.s.trimStart().length;
+        if (x0 === null && it.s.trim()) x0 = it.x + (lead && it.w ? it.w * lead / it.s.length : 0);
+        if (end !== null && it.x > end + 1.5 && !/\s$/.test(text) && !/^\s/.test(it.s)) text += ' ';
+        text += it.s; end = it.x + it.w;
+      }
+      text = text.replace(/\s+/g, ' ').trim();
+      if (text) lines.push({ page: pi, x: x0, y: r.y, text });
+    }
+  });
+  if (!lines.length) return [];
+
+  // typical line spacing
+  const diffs = [];
+  for (let i = 1; i < lines.length; i++)
+    if (lines[i].page === lines[i - 1].page) {
+      const d = lines[i - 1].y - lines[i].y;
+      if (d > 0) diffs.push(d);
+    }
+  diffs.sort((a, b) => a - b);
+  const lineH = diffs.length ? diffs[Math.floor(diffs.length * 0.25)] : 12;
+
+  // left margin of mixed-case text (action, or dialogue if there's no action)
+  const counts = {};
+  for (const L of lines)
+    if (/[a-z]/.test(L.text) && !L.text.startsWith('(')) {
+      const k = Math.round(L.x / 4) * 4;
+      counts[k] = (counts[k] || 0) + 1;
+    }
+  let keys = Object.keys(counts).map(Number).filter(k => counts[k] >= 2);
+  if (!keys.length) keys = lines.map(L => L.x);
+  const actionX = Math.min(...keys);
+
+  const out = [];
+  let blk = null;       // block currently collecting dialogue
+  let inParen = false;
+  for (let i = 0; i < lines.length; i++) {
+    const L = lines[i], t = L.text;
+    const prev = lines[i - 1];
+    const gap = !prev || L.page !== prev.page || (prev.y - L.y) > lineH * 1.6;
+    if (/^\(?MORE\)?$/i.test(t)) { if (blk) blk.more = true; continue; }
+    if (isNoise(t)) continue;
+
+    if (isCueText(t) && L.x >= actionX + 40) {
+      const who = cleanName(t);
+      const last = out[out.length - 1];
+      if (last && last.more && last.who === who) { blk = last; blk.more = false; }
+      else { blk = { who, parts: [], dx: null }; out.push(blk); }
+      blk.fresh = true; inParen = false;
+      continue;
+    }
+    if (!blk) continue;
+
+    const isParen = t.startsWith('(');
+    let accept;
+    if (blk.fresh) accept = isParen || L.x > actionX + 15 || keys.length === 1;
+    else if (gap) accept = false;
+    else accept = inParen || isParen
+      || (blk.dx === null ? L.x > actionX + 15 : Math.abs(L.x - blk.dx) <= 12);
+
+    if (!accept) { blk = null; inParen = false; continue; }
+    blk.fresh = false;
+    if (isParen) inParen = !t.includes(')');
+    else if (inParen) inParen = !t.includes(')');
+    else if (blk.dx === null) blk.dx = L.x;
+    blk.parts.push(t);
+  }
+  return out
+    .map(b => ({ who: b.who, text: b.parts.join(' ').replace(/\s+/g, ' ').trim() }))
+    .filter(b => b.text);
+}
+
+function parsePlain(text) {
+  const out = [];
+  let cur = null;
+  for (const raw of text.split(/\r?\n/)) {
+    const t = raw.trim();
+    if (!t) { cur = null; continue; }
+    const m = t.match(/^([A-Za-z][A-Za-z0-9 .'’\-&]{0,30}?)\s*(\([^)]*\))?\s*:\s*(.+)$/);
+    if (m && m[1].trim().split(/\s+/).length <= 3) {
+      out.push({ who: m[1].trim().toUpperCase(), text: m[3].trim() });
+      cur = null; continue;
+    }
+    if (isCueText(t)) { cur = { who: cleanName(t), text: '' }; out.push(cur); continue; }
+    if (cur) { cur.text += (cur.text ? ' ' : '') + t; continue; }
+  }
+  return out.filter(l => l.text);
+}
+
+// Turn a reader line into speakable segments. Supports:
+// [pause] [pause 2] [beat] [slow] [fast] [soft] [loud] [high] [low] [normal]
+// Screenplay parentheticals are not spoken; (beat)/(pause) become a 1s pause.
+function parseTags(text) {
+  text = text.replace(/\(([^)]*)\)/g, (m, inner) =>
+    /\b(beat|pause|beats)\b/i.test(inner) ? ' [pause 1] ' : ' ');
+  const parts = text.split(/\[([^\]]*)\]/);
+  const st = { rate: 1, pitch: 1, volume: 1 };
+  const segs = [];
+  parts.forEach((p, i) => {
+    if (i % 2 === 0) {
+      if (p.trim()) segs.push({ text: p.trim(), ...st });
+      return;
+    }
+    const tag = p.trim().toLowerCase();
+    let m;
+    if ((m = tag.match(/^(pause|beat|wait|long pause)\s*([\d.]+)?\s*s?$/))) {
+      const n = m[2] ? parseFloat(m[2]) : (m[1] === 'long pause' ? 2.5 : 1);
+      segs.push({ pause: Math.min(n, 15) });
+    } else if (tag === 'slow') st.rate = 0.75;
+    else if (tag === 'fast') st.rate = 1.3;
+    else if (/^(soft|quiet|whisper|whispers)$/.test(tag)) { st.volume = 0.4; st.rate = 0.9; }
+    else if (/^(loud|shout|shouts|yell|yells)$/.test(tag)) { st.volume = 1; st.rate = 1.1; st.pitch = 1.15; }
+    else if (tag === 'high') st.pitch = 1.3;
+    else if (tag === 'low') st.pitch = 0.75;
+    else if (tag === 'normal') { st.rate = 1; st.pitch = 1; st.volume = 1; }
+    // anything else (e.g. [sighs]) is silently skipped — free voices can't do it
+  });
+  return segs;
+}
+
+
+// ---------- helpers ----------
+const $ = (s, el = document) => el.querySelector(s);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const uid = () => Math.random().toString(36).slice(2, 10);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let toastT;
+function toast(msg, ms = 3000) {
+  const t = $('#toast'); t.textContent = msg; t.classList.remove('hidden');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.add('hidden'), ms);
+}
+function show(id) {
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === id));
+  window.scrollTo(0, 0);
+}
+function fmtLine(text) {
+  return esc(text)
+    .replace(/\[([^\]]*)\]/g, '<span class="tag">[$1]</span>')
+    .replace(/\(([^)]*)\)/g, '<span class="par">($1)</span>');
+}
+
+// ---------- storage ----------
+const KEY = 'selftape.scripts.v1', SKEY = 'selftape.settings.v1';
+function loadJSON(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }
+function saveJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { toast('Could not save on this device'); } }
+let scripts = loadJSON(KEY, []);
+const settings = Object.assign({ cue: 'manual', silence: 700, thr: -42, fs: 34, pos: 'top', delay: 5, showCam: true, facing: 'user' }, loadJSON(SKEY, {}));
+let cur = null;
+let saveT;
+function persist() {
+  if (cur) cur.updated = Date.now();
+  clearTimeout(saveT); saveT = setTimeout(() => saveJSON(KEY, scripts), 300);
+}
+function saveSettings() { saveJSON(SKEY, settings); }
+
+// ---------- library ----------
+function renderLibrary() {
+  const list = $('#libList'); list.innerHTML = '';
+  $('#libEmpty').classList.toggle('hidden', scripts.length > 0);
+  [...scripts].sort((a, b) => b.updated - a.updated).forEach(s => {
+    const el = document.createElement('div');
+    el.className = 'card lib-item';
+    el.innerHTML = `<div class="t"><b>${esc(s.title || 'Untitled')}</b><div class="muted">${s.me ? 'You: ' + esc(s.me) + ' · ' : ''}${s.lines.length} lines</div></div>
+      <button class="small danger">Delete</button>`;
+    el.querySelector('.t').onclick = () => openScript(s.id);
+    const del = el.querySelector('button');
+    del.onclick = () => {
+      if (del.dataset.armed) { scripts = scripts.filter(x => x.id !== s.id); saveJSON(KEY, scripts); renderLibrary(); }
+      else { del.dataset.armed = 1; del.textContent = 'Tap again to delete'; setTimeout(() => { delete del.dataset.armed; del.textContent = 'Delete'; }, 3000); }
+    };
+    list.appendChild(el);
+  });
+}
+function newScript(title, lines) {
+  const s = { id: uid(), title, me: '', lines: lines.map(l => ({ id: uid(), who: l.who, text: l.text })), voices: {}, updated: Date.now() };
+  const chars = charsOf(s);
+  s.me = chars[0] || '';
+  scripts.push(s); saveJSON(KEY, scripts);
+  return s;
+}
+function charsOf(s) {
+  const seen = []; for (const l of s.lines) if (l.who && !seen.includes(l.who)) seen.push(l.who);
+  for (const c of (s.extraChars || [])) if (!seen.includes(c)) seen.push(c);
+  return seen;
+}
+
+$('#btnPdf').onclick = () => $('#filePdf').click();
+$('#filePdf').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  toast('Reading PDF…', 10000);
+  try {
+    const lines = await importPdf(f);
+    if (lines.length < 2) { toast("Couldn't find dialogue in that PDF. It may be a scanned image. Try Paste text instead.", 6000); return; }
+    const s = newScript(f.name.replace(/\.pdf$/i, ''), lines);
+    toast(`Found ${lines.length} lines. Check them, and pick who you're playing.`, 4000);
+    openScript(s.id);
+  } catch (err) {
+    console.error(err);
+    toast('PDF import failed: ' + (err.message || err), 6000);
+  }
+};
+async function importPdf(file) {
+  const pdfjs = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/pdf.min.mjs');
+  pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/pdf.worker.min.mjs';
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  const pages = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const pg = await doc.getPage(i);
+    pages.push((await pg.getTextContent()).items);
+  }
+  return parseScreenplayItems(pages);
+}
+$('#btnPaste').onclick = () => { $('#pastePanel').classList.remove('hidden'); $('#pasteText').focus(); };
+$('#btnPasteCancel').onclick = () => $('#pastePanel').classList.add('hidden');
+$('#btnPasteGo').onclick = () => {
+  const lines = parsePlain($('#pasteText').value);
+  if (!lines.length) { toast('No lines found. Use NAME: line, or a NAME on its own line above the dialogue.', 5000); return; }
+  const s = newScript('Pasted scene', lines);
+  $('#pasteText').value = ''; $('#pastePanel').classList.add('hidden');
+  openScript(s.id);
+};
+$('#btnBlank').onclick = () => {
+  const s = newScript('New scene', [{ who: 'ME', text: '' }, { who: 'READER', text: '' }]);
+  s.me = 'ME'; persist(); openScript(s.id);
+};
+
+// ---------- voices ----------
+let voices = [];
+function loadVoices() {
+  if (!('speechSynthesis' in window)) return;
+  voices = speechSynthesis.getVoices();
+  if ($('#view-editor').classList.contains('on')) renderVoices();
+}
+if ('speechSynthesis' in window) {
+  loadVoices();
+  speechSynthesis.addEventListener?.('voiceschanged', loadVoices);
+}
+function goodVoices() {
+  const en = voices.filter(v => /^en/i.test(v.lang));
+  const list = en.length ? en : voices;
+  const score = v => (/(premium|enhanced|natural|neural)/i.test(v.name) ? 0 : 1) + (v.localService ? 0 : 0.5);
+  return [...list].sort((a, b) => score(a) - score(b) || a.name.localeCompare(b.name));
+}
+function voiceFor(who) {
+  const cfg = (cur.voices[who] ||= { voiceURI: '', rate: 1, pitch: 1 });
+  let v = voices.find(v => v.voiceURI === cfg.voiceURI);
+  if (!v) {
+    const gv = goodVoices();
+    const readers = charsOf(cur).filter(c => c !== cur.me);
+    v = gv[Math.max(0, readers.indexOf(who)) % Math.max(1, gv.length)] || null;
+  }
+  return { voice: v, rate: cfg.rate ?? 1, pitch: cfg.pitch ?? 1 };
+}
+
+// ---------- editor ----------
+let returnToRun = false;
+function openScript(id) {
+  cur = scripts.find(s => s.id === id);
+  if (!cur) return;
+  cur.voices ||= {};
+  returnToRun = false;
+  renderEditor(); show('view-editor');
+}
+function renderEditor() {
+  $('#edTitle').value = cur.title;
+  renderMe(); renderVoices(); renderLines();
+  $('#btnEdReturn').classList.toggle('hidden', !returnToRun);
+  $('#btnEdRun').classList.toggle('hidden', returnToRun);
+}
+function renderMe() {
+  const sel = $('#edMe'); const chars = charsOf(cur);
+  sel.innerHTML = chars.map(c => `<option ${c === cur.me ? 'selected' : ''}>${esc(c)}</option>`).join('');
+}
+$('#edTitle').oninput = e => { cur.title = e.target.value; persist(); };
+$('#edMe').onchange = e => { cur.me = e.target.value; persist(); renderVoices(); renderLines(); };
+
+function renderVoices() {
+  const box = $('#voiceList'); box.innerHTML = '';
+  if (!('speechSynthesis' in window)) { $('#voiceNote').textContent = "This browser has no built-in voices."; return; }
+  $('#voiceNote').textContent = voices.length ? '' : 'Loading voices… (if none appear, reload the page)';
+  const gv = goodVoices();
+  for (const who of charsOf(cur).filter(c => c !== cur.me)) {
+    const v = voiceFor(who);
+    const cfg = cur.voices[who];
+    const el = document.createElement('div'); el.className = 'card voice';
+    el.innerHTML = `<b>${esc(who)}</b>
+      <select>${gv.map(x => `<option value="${esc(x.voiceURI)}" ${v.voice && x.voiceURI === v.voice.voiceURI ? 'selected' : ''}>${esc(x.name)} (${esc(x.lang)})</option>`).join('')}</select>
+      <label>Speed <span>${(+cfg.rate).toFixed(2)}</span></label><input type="range" min="0.5" max="1.6" step="0.05" value="${cfg.rate}" data-k="rate">
+      <label>Pitch <span>${(+cfg.pitch).toFixed(2)}</span></label><input type="range" min="0.5" max="1.6" step="0.05" value="${cfg.pitch}" data-k="pitch">
+      <div class="row"><button class="small">Test voice</button></div>`;
+    el.querySelector('select').onchange = e => { cfg.voiceURI = e.target.value; persist(); };
+    el.querySelectorAll('input[type=range]').forEach(r => r.oninput = e => {
+      cfg[r.dataset.k] = +e.target.value; r.previousElementSibling.querySelector('span').textContent = (+e.target.value).toFixed(2); persist();
+    });
+    el.querySelector('button').onclick = () => {
+      const sample = cur.lines.find(l => l.who === who && l.text.trim());
+      speechSynthesis.cancel();
+      run.token++;
+      speakLine({ who, text: sample ? sample.text : 'This is how I sound.' }, run.token);
+    };
+    box.appendChild(el);
+  }
+}
+
+function renderLines(focusId) {
+  const box = $('#lineList'); box.innerHTML = '';
+  const chars = charsOf(cur);
+  cur.lines.forEach((l, i) => {
+    const el = document.createElement('div');
+    el.className = 'ln' + (l.who === cur.me ? ' me' : '') + (returnToRun && i === run.idx ? ' here' : '');
+    el.innerHTML = `<div class="who"><select>${chars.map(c => `<option ${c === l.who ? 'selected' : ''}>${esc(c)}</option>`).join('')}<option value="__new">+ New character…</option></select></div>
+      <textarea rows="1" placeholder="Line…">${esc(l.text)}</textarea>
+      <div class="acts"><button class="small" title="Add line below">+</button><button class="small danger" title="Delete line">✕</button></div>`;
+    const sel = el.querySelector('select'), ta = el.querySelector('textarea');
+    const [add, del] = el.querySelectorAll('.acts button');
+    sel.onchange = () => {
+      if (sel.value === '__new') {
+        const n = (window.prompt('Character name') || '').trim().toUpperCase();
+        if (n) { l.who = n; (cur.extraChars ||= []).includes(n) || cur.extraChars.push(n); }
+      } else l.who = sel.value;
+      persist(); renderMe(); renderVoices(); renderLines();
+    };
+    const fit = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
+    ta.oninput = () => { l.text = ta.value; fit(); persist(); };
+    requestAnimationFrame(fit);
+    add.onclick = () => {
+      const other = chars.find(c => c !== l.who) || l.who;
+      const nl = { id: uid(), who: other, text: '' };
+      cur.lines.splice(i + 1, 0, nl); persist(); renderLines(nl.id);
+    };
+    del.onclick = () => {
+      if (del.dataset.armed) {
+        cur.lines.splice(i, 1);
+        if (returnToRun && run.idx > i) run.idx--;
+        persist(); renderLines();
+      } else { del.dataset.armed = 1; del.textContent = 'sure?'; setTimeout(() => { delete del.dataset.armed; del.textContent = '✕'; }, 2500); }
+    };
+    box.appendChild(el);
+    if (focusId === l.id) setTimeout(() => { ta.focus(); el.scrollIntoView({ block: 'center' }); }, 30);
+    if (!focusId && returnToRun && i === run.idx) setTimeout(() => el.scrollIntoView({ block: 'center' }), 30);
+  });
+}
+$('#btnAddEnd').onclick = () => {
+  const chars = charsOf(cur); const last = cur.lines[cur.lines.length - 1];
+  const who = last ? (chars.find(c => c !== last.who) || last.who) : (cur.me || 'ME');
+  const nl = { id: uid(), who, text: '' }; cur.lines.push(nl); persist(); renderLines(nl.id);
+};
+$('#btnEdBack').onclick = () => { if (returnToRun) leaveRun(); renderLibrary(); show('view-library'); };
+$('#btnEdRun').onclick = () => enterRun();
+$('#btnEdReturn').onclick = () => {
+  returnToRun = false; show('view-run'); renderPrompter();
+  if (run.rec && run.rec.state === 'paused') { try { run.rec.resume(); } catch {} }
+  if (run.active) step();
+};
+
+// ---------- speech ----------
+const keep = [];
+function unlockSpeech() {
+  // iOS needs the first speech to start inside a tap
+  try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } catch {}
+}
+function speakText(text, o, t) {
+  if (!('speechSynthesis' in window)) return sleep(400 * text.split(/\s+/).length / o.rate).then(() => t === run.token);
+  return new Promise(res => {
+    const u = new SpeechSynthesisUtterance(text);
+    if (o.voice) { u.voice = o.voice; u.lang = o.voice.lang; }
+    u.rate = Math.max(0.1, Math.min(2, o.rate)); u.pitch = Math.max(0, Math.min(2, o.pitch)); u.volume = o.volume;
+    let done = false, started = false, quiet = 0;
+    const finish = ok => { if (done) return; done = true; clearInterval(poll); keep.splice(keep.indexOf(u), 1); res(ok); };
+    u.onstart = () => { started = true; };
+    u.onend = () => finish(true);
+    u.onerror = e => finish(!(e.error === 'interrupted' || e.error === 'canceled'));
+    // backup in case the browser never fires onend
+    const t0 = performance.now();
+    const poll = setInterval(() => {
+      if (t !== run.token) return finish(false);
+      const el = performance.now() - t0;
+      if ((started || el > 1500) && !speechSynthesis.speaking && !speechSynthesis.pending) { if (++quiet >= 2) finish(true); }
+      else quiet = 0;
+      if (el > 60000) finish(true);
+    }, 200);
+    keep.push(u);
+    speechSynthesis.speak(u);
+  });
+}
+async function speakLine(ln, t) {
+  const v = voiceFor(ln.who);
+  for (const s of parseTags(ln.text)) {
+    if (t !== run.token) return false;
+    if (s.pause) { await sleep(s.pause * 1000); continue; }
+    const ok = await speakText(s.text, { voice: v.voice, rate: v.rate * s.rate, pitch: v.pitch * s.pitch, volume: s.volume }, t);
+    if (!ok) return false;
+  }
+  return t === run.token;
+}
+
+// ---------- run / tape ----------
+const run = { stream: null, rec: null, chunks: [], active: false, recording: false, idx: 0, token: 0, phase: 'idle',
+  ctx: null, analyser: null, buf: null, heard: false, loudMs: 0, quietMs: 0, listenFrom: 0, lastT: 0, recStart: 0, wake: null, takes: 0 };
+
+async function enterRun() {
+  if (!cur.lines.length) { toast('Add some lines first'); return; }
+  if (!cur.me) { toast("Pick who you're playing first"); return; }
+  run.idx = 0; run.phase = 'idle'; run.active = false;
+  applySettings(); show('view-run'); renderPrompter(); updateButtons();
+  await openCamera();
+}
+function leaveRun() {
+  stopTake(true);
+  if (run.stream) run.stream.getTracks().forEach(t => t.stop());
+  run.stream = null; $('#preview').srcObject = null;
+}
+async function openCamera() {
+  const err = $('#camerr'); err.classList.add('hidden');
+  if (run.stream) run.stream.getTracks().forEach(t => t.stop());
+  if (!navigator.mediaDevices?.getUserMedia) {
+    err.innerHTML = `<div>Camera isn't available here.${location.protocol !== 'https:' ? '<br>The page has to be opened from an <b>https://</b> address (like your GitHub Pages link).' : ''}</div>`;
+    err.classList.remove('hidden'); return;
+  }
+  try {
+    run.stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: settings.facing, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
+      // echo cancellation OFF so the reader's voice from the speaker stays in the recording
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    });
+    const pv = $('#preview'); pv.srcObject = run.stream; pv.classList.toggle('back', settings.facing !== 'user');
+    pv.play().catch(() => {});
+    setupMeter();
+  } catch (e) {
+    console.error(e);
+    err.innerHTML = `<div>Couldn't open the camera/mic (${esc(e.name || e.message)}).<br>Allow camera and microphone for this site, then tap Exit and come back.</div>`;
+    err.classList.remove('hidden');
+  }
+}
+function setupMeter() {
+  try {
+    run.ctx ||= new (window.AudioContext || window.webkitAudioContext)();
+    const src = run.ctx.createMediaStreamSource(run.stream);
+    run.analyser = run.ctx.createAnalyser(); run.analyser.fftSize = 1024;
+    run.buf = new Float32Array(run.analyser.fftSize);
+    src.connect(run.analyser);
+  } catch (e) { console.warn('meter', e); }
+}
+function meterLoop(now) {
+  requestAnimationFrame(meterLoop);
+  if (!run.analyser || !$('#view-run').classList.contains('on')) { run.lastT = now; return; }
+  const dt = run.lastT ? Math.min(100, now - run.lastT) : 16; run.lastT = now;
+  run.analyser.getFloatTimeDomainData(run.buf);
+  let sum = 0; for (let i = 0; i < run.buf.length; i++) sum += run.buf[i] * run.buf[i];
+  const db = 20 * Math.log10(Math.sqrt(sum / run.buf.length) + 1e-9);
+  const pct = v => Math.max(0, Math.min(100, (v + 70) / 60 * 100));
+  $('#meterfill').style.width = pct(db) + '%';
+  $('#meterthr').style.left = pct(settings.thr) + '%';
+  $('#meterfill').style.background = db > settings.thr ? '#4ade80' : '#555';
+  if (run.active && run.phase === 'actor' && settings.cue === 'auto' && now > run.listenFrom) {
+    if (db > settings.thr) { run.loudMs += dt; run.quietMs = 0; if (run.loudMs > 120) run.heard = true; }
+    else { run.loudMs = 0; if (run.heard) { run.quietMs += dt; if (run.quietMs >= settings.silence) next(); } }
+  }
+  if (run.recording) {
+    const s = Math.floor((Date.now() - run.recStart) / 1000);
+    $('#stRec').textContent = `● ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
+}
+requestAnimationFrame(meterLoop);
+
+function renderPrompter() {
+  const L = cur.lines, i = run.idx;
+  const cell = (el, ln, extra = '') => {
+    if (!ln) { el.className = 'pl ' + extra; el.innerHTML = ''; return; }
+    el.className = 'pl ' + (ln.who === cur.me ? 'me' : 'them') + ' ' + extra;
+    el.innerHTML = `<div class="pwho">${esc(ln.who)}</div><div class="ptxt">${fmtLine(ln.text || '…')}</div>`;
+  };
+  if (i >= L.length) {
+    $('#pCur').className = 'pl them'; $('#pCur').innerHTML = '<div class="ptxt">— end of scene —</div>'; cell($('#pNext'), null, 'next');
+  } else { cell($('#pCur'), L[i]); cell($('#pNext'), L[i + 1], 'next'); }
+  $('#stPos').textContent = `${Math.min(i + 1, L.length)}/${L.length}`;
+  const ph = { idle: 'ready', actor: settings.cue === 'auto' ? 'your line · listening' : 'your line', reader: 'reader', end: 'end', lead: '…' }[run.phase] || '';
+  $('#stPhase').textContent = ph;
+}
+function step() {
+  const t = ++run.token;
+  if (run.idx >= cur.lines.length) { run.phase = 'end'; renderPrompter(); return; }
+  const ln = cur.lines[run.idx];
+  if (ln.who === cur.me) {
+    run.phase = 'actor'; run.heard = false; run.loudMs = 0; run.quietMs = 0;
+    run.listenFrom = performance.now() + 300;
+    renderPrompter();
+  } else {
+    run.phase = 'reader'; renderPrompter();
+    speakLine(ln, t).then(ok => {
+      if (ok && t === run.token && run.active) { run.idx++; step(); }
+    });
+  }
+}
+function next() {
+  if (!$('#view-run').classList.contains('on')) return;
+  if (!run.active) { run.idx = Math.min(cur.lines.length - 1, run.idx + 1); renderPrompter(); return; }
+  if (run.phase === 'end' || run.phase === 'lead') return;
+  run.token++; speechSynthesis.cancel();
+  run.idx++; step();
+}
+function back() {
+  if (!$('#view-run').classList.contains('on')) return;
+  run.token++; speechSynthesis.cancel();
+  run.idx = Math.max(0, Math.min(run.idx, cur.lines.length) - 1);
+  if (run.active && run.phase !== 'lead') step(); else renderPrompter();
+}
+function pickMime() {
+  if (!window.MediaRecorder) return null;
+  for (const m of ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'])
+    if (MediaRecorder.isTypeSupported?.(m)) return m;
+  return '';
+}
+async function startTake(record) {
+  if (!run.stream) { await openCamera(); if (!run.stream) return; }
+  if (record && !window.MediaRecorder) { toast("This browser can't record video"); return; }
+  unlockSpeech();
+  try { await run.ctx?.resume(); } catch {}
+  try { run.wake = await navigator.wakeLock?.request('screen'); } catch {}
+  $('#settings').classList.add('hidden');
+  run.active = true; run.phase = 'lead'; run.recording = false;
+  if (run.idx >= cur.lines.length) run.idx = 0;
+  updateButtons(); renderPrompter();
+  const myRun = ++run.token;
+  for (let n = +settings.delay; n > 0; n--) {
+    if (myRun !== run.token || !run.active) return;
+    $('#countdown').textContent = n; $('#countdown').classList.remove('hidden');
+    await sleep(1000);
+  }
+  $('#countdown').classList.add('hidden');
+  if (myRun !== run.token || !run.active) return;
+  if (record) {
+    const mime = pickMime();
+    run.chunks = [];
+    try {
+      run.rec = new MediaRecorder(run.stream, mime ? { mimeType: mime, videoBitsPerSecond: 8_000_000, audioBitsPerSecond: 192_000 } : undefined);
+    } catch { run.rec = new MediaRecorder(run.stream); }
+    run.rec.ondataavailable = e => { if (e.data && e.data.size) run.chunks.push(e.data); };
+    run.rec.onstop = finishRecording;
+    run.rec.start(1000);
+    run.recording = true; run.recStart = Date.now();
+    updateButtons();
+    await sleep(1000);  // a beat of head room before the first line
+    if (myRun !== run.token || !run.active) return;
+  }
+  step();
+}
+function stopTake(silent) {
+  const wasRec = run.recording;
+  run.active = false; run.token++; run.phase = 'idle';
+  try { speechSynthesis.cancel(); } catch {}
+  $('#countdown').classList.add('hidden');
+  try { run.wake?.release(); } catch {} run.wake = null;
+  run.recording = false;
+  if (run.rec && run.rec.state !== 'inactive') {
+    if (silent) run.rec.onstop = null;
+    run.rec.stop();
+  }
+  if (!silent) { updateButtons(); renderPrompter(); }
+  return wasRec;
+}
+let lastTake = null;
+function finishRecording() {
+  const type = (run.rec.mimeType || 'video/mp4').split(';')[0];
+  const blob = new Blob(run.chunks, { type });
+  run.chunks = [];
+  const ext = type.includes('mp4') ? 'mp4' : 'webm';
+  run.takes++;
+  const safe = s => (s || '').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_');
+  const name = `${safe(cur.title) || 'selftape'}_${safe(cur.me)}_take${run.takes}.${ext}`;
+  if (lastTake) URL.revokeObjectURL(lastTake.url);
+  lastTake = { blob, name, type, url: URL.createObjectURL(blob) };
+  $('#reviewVideo').src = lastTake.url;
+  $('#reviewTitle').textContent = `Take ${run.takes}`;
+  $('#reviewInfo').textContent = `${name} · ${(blob.size / 1e6).toFixed(1)} MB`;
+  show('view-review');
+}
+function updateButtons() {
+  const a = run.active;
+  $('#btnRehearse').classList.toggle('hidden', a);
+  $('#btnRecord').classList.toggle('hidden', a);
+  $('#btnStop').classList.toggle('hidden', !a);
+  $('#btnRunExit').classList.toggle('hidden', a);
+  $('#stRec').classList.toggle('hidden', !run.recording);
+}
+function applySettings() {
+  document.documentElement.style.setProperty('--fs', settings.fs + 'px');
+  $('#prompter').className = settings.pos;
+  $('#preview').classList.toggle('off', !settings.showCam);
+  $('#sCue').value = settings.cue; $('#autoOpts').classList.toggle('hidden', settings.cue !== 'auto');
+  $('#sSil').value = settings.silence; $('#sSilVal').textContent = (settings.silence / 1000).toFixed(2) + ' s';
+  $('#sThr').value = settings.thr; $('#sThrVal').textContent = settings.thr + ' dB';
+  $('#sFs').value = settings.fs; $('#sPos').value = settings.pos; $('#sDelay').value = settings.delay;
+  $('#sShow').checked = settings.showCam;
+}
+const bindSetting = (id, key, conv = v => v, ev = 'input') => $(id).addEventListener(ev, e => {
+  settings[key] = conv(e.target.type === 'checkbox' ? e.target.checked : e.target.value);
+  saveSettings(); applySettings(); renderPrompter();
+});
+bindSetting('#sCue', 'cue', String, 'change');
+bindSetting('#sSil', 'silence', Number);
+bindSetting('#sThr', 'thr', Number);
+bindSetting('#sFs', 'fs', Number);
+bindSetting('#sPos', 'pos', String, 'change');
+bindSetting('#sDelay', 'delay', Number, 'change');
+bindSetting('#sShow', 'showCam', Boolean, 'change');
+$('#btnFlip').onclick = async () => { if (run.active) return toast('Stop the take first'); settings.facing = settings.facing === 'user' ? 'environment' : 'user'; saveSettings(); await openCamera(); };
+$('#btnHelp').onclick = () => $('#helpText').classList.toggle('hidden');
+$('#btnSettings').onclick = () => $('#settings').classList.toggle('hidden');
+$('#btnRehearse').onclick = () => startTake(false);
+$('#btnRecord').onclick = () => startTake(true);
+$('#btnStop').onclick = () => stopTake(false);
+$('#btnRunNext').onclick = e => { e.stopPropagation(); next(); };
+$('#btnRunBack').onclick = e => { e.stopPropagation(); back(); };
+$('#tapzone').onclick = () => { if (!$('#settings').classList.contains('hidden')) { $('#settings').classList.add('hidden'); return; } next(); };
+$('#btnRunExit').onclick = () => { leaveRun(); renderEditor(); show('view-editor'); };
+$('#btnRunEdit').onclick = () => {
+  run.token++; try { speechSynthesis.cancel(); } catch {}
+  if (run.rec && run.rec.state === 'recording') { try { run.rec.pause(); } catch {} }
+  returnToRun = true; renderEditor(); show('view-editor');
+};
+document.addEventListener('keydown', e => {
+  if (!$('#view-run').classList.contains('on')) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)) return;
+  const k = e.key;
+  if (['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter', 'MediaTrackNext'].includes(k)) { e.preventDefault(); next(); }
+  else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'MediaTrackPrevious'].includes(k)) { e.preventDefault(); back(); }
+});
+function checkOrientation() { $('#portraitHint').classList.toggle('hidden', !(window.innerHeight > window.innerWidth) || run.active); }
+window.addEventListener('resize', checkOrientation); checkOrientation();
+
+// ---------- review ----------
+$('#btnSave').onclick = async () => {
+  if (!lastTake) return;
+  const file = new File([lastTake.blob], lastTake.name, { type: lastTake.type });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: lastTake.name }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  const a = $('#dlLink'); a.href = lastTake.url; a.download = lastTake.name; a.click();
+};
+$('#btnRetake').onclick = () => { $('#reviewVideo').pause(); run.idx = 0; show('view-run'); renderPrompter(); updateButtons(); };
+$('#btnReviewDone').onclick = () => { $('#reviewVideo').pause(); leaveRun(); renderEditor(); show('view-editor'); };
+
+renderLibrary();
+</script>
+</body>
+</html>
